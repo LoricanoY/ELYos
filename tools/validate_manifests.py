@@ -7,7 +7,11 @@ Validates ELYos community TOML manifests located in:
   - community-modules/
 
 Ensures required sections, fields, formats (SemVer, reverse-domain IDs),
-and security constraints (immutable references, no self-assigned verification status).
+and security constraints:
+  - Immutable release references (tags/commits, rejecting mutable branches).
+  - Strict prohibition of the 'status' field in community manifests
+    (verification status is managed exclusively by maintainers).
+  - No external downloads or code execution.
 """
 
 from __future__ import annotations
@@ -45,6 +49,24 @@ ID_REGEX = re.compile(r"^[a-z0-9]+(\.[a-z0-9_-]+)+$")
 # URL validation regex (http, https, git protocols)
 URL_REGEX = re.compile(r"^(https?|git)://[^\s/$.?#].[^\s]*$", re.IGNORECASE)
 
+# Git commit hash regex (7 to 40 hex characters)
+COMMIT_HASH_REGEX = re.compile(r"^[0-9a-fA-F]{7,40}$")
+
+# Common mutable branch / floating reference names that cannot be used as immutable tags
+MUTABLE_BRANCH_NAMES = {
+    "main",
+    "master",
+    "dev",
+    "develop",
+    "development",
+    "trunk",
+    "head",
+    "latest",
+    "nightly",
+    "current",
+    "stable",
+}
+
 SUPPORTED_REPO_TYPES = {"git"}
 
 SUPPORTED_ARCHITECTURES = {
@@ -55,19 +77,6 @@ SUPPORTED_ARCHITECTURES = {
     "riscv64",
     "x86",
     "all",
-}
-
-VALID_STATUSES = {
-    "official",
-    "community-reviewed",
-    "unverified",
-    "problematic",
-}
-
-# Developers submitting community manifests are strictly forbidden from self-assigning these tiers
-RESTRICTED_STATUSES = {
-    "official",
-    "community-reviewed",
 }
 
 
@@ -95,7 +104,13 @@ def is_valid_module_id(module_id: str) -> bool:
 
 def is_valid_url(url: str) -> bool:
     """Check if repository URL is a valid http/https/git URL."""
-    return bool(URL_REGEX.match(url.strip()))
+    clean_url = url.strip()
+    if not URL_REGEX.match(clean_url):
+        return False
+    # Disallow localhost / loopback URLs
+    if "://localhost" in clean_url or "://127.0.0.1" in clean_url:
+        return False
+    return True
 
 
 def parse_toml(file_path: Path) -> Tuple[Dict[str, Any] | None, str | None]:
@@ -118,9 +133,18 @@ def validate_manifest(
     data: Dict[str, Any],
     file_path: Path,
     seen_ids: Dict[str, str],
-    allow_privileged_status: bool = False,
 ) -> List[ValidationError]:
-    """Validate a parsed manifest dictionary against ELYos specifications."""
+    """
+    Validate a parsed manifest dictionary against ELYos specifications.
+    
+    Ensures:
+      - Required sections: [module], [repository], [compatibility], [metadata]
+      - Required module fields: id, name, description, version
+      - Required repository fields: type, url, plus immutable tag or commit
+      - Required compatibility fields: minimum_core_version, architecture
+      - Required metadata fields: developer, license
+      - Strict prohibition: no 'status' field in community manifests
+    """
     errors: List[ValidationError] = []
     path_str = str(file_path)
 
@@ -171,7 +195,7 @@ def validate_manifest(
                 )
             )
         else:
-            # Check for duplicate IDs across all manifests
+            # Check for duplicate IDs across all manifests in both registries
             if mod_id in seen_ids and seen_ids[mod_id] != path_str:
                 errors.append(
                     ValidationError(
@@ -224,11 +248,13 @@ def validate_manifest(
         )
 
     # 3. Validate [repository] section
-    # Required fields: type, url
+    # Required fields: type, url, and an immutable release reference (tag or commit)
     repo_type = repo_sec.get("type")
     if repo_type is None:
         errors.append(
-            ValidationError(path_str, "repository.type", "Missing required field 'type'")
+            ValidationError(
+                path_str, "repository.type", "Missing required field 'type'"
+            )
         )
     elif not isinstance(repo_type, str) or not repo_type.strip():
         errors.append(
@@ -248,7 +274,9 @@ def validate_manifest(
     repo_url = repo_sec.get("url")
     if repo_url is None:
         errors.append(
-            ValidationError(path_str, "repository.url", "Missing required field 'url'")
+            ValidationError(
+                path_str, "repository.url", "Missing required field 'url'"
+            )
         )
     elif not isinstance(repo_url, str) or not repo_url.strip():
         errors.append(
@@ -265,11 +293,48 @@ def validate_manifest(
             )
         )
 
-    # Security rule: Git branch (such as main) is not an immutable release reference.
-    # Releases must specify an immutable release tag or commit hash.
+    # Security rule: Git branch alone is NOT an immutable release reference.
+    # Manifests must provide an immutable 'tag' or 'commit'.
     repo_tag = repo_sec.get("tag")
     repo_commit = repo_sec.get("commit")
     repo_branch = repo_sec.get("branch")
+
+    if repo_tag is not None:
+        if not isinstance(repo_tag, str) or not repo_tag.strip():
+            errors.append(
+                ValidationError(
+                    path_str,
+                    "repository.tag",
+                    "Field 'tag' must be a non-empty string",
+                )
+            )
+        elif repo_tag.strip().lower() in MUTABLE_BRANCH_NAMES:
+            errors.append(
+                ValidationError(
+                    path_str,
+                    "repository.tag",
+                    f"Tag '{repo_tag}' appears to be a mutable branch name. "
+                    "Manifests must reference an immutable release tag (e.g., 'v1.0.0').",
+                )
+            )
+
+    if repo_commit is not None:
+        if not isinstance(repo_commit, str) or not repo_commit.strip():
+            errors.append(
+                ValidationError(
+                    path_str,
+                    "repository.commit",
+                    "Field 'commit' must be a non-empty string",
+                )
+            )
+        elif not COMMIT_HASH_REGEX.match(repo_commit.strip()):
+            errors.append(
+                ValidationError(
+                    path_str,
+                    "repository.commit",
+                    f"Commit '{repo_commit}' is not a valid Git SHA (must be 7-40 hexadecimal characters).",
+                )
+            )
 
     if not repo_tag and not repo_commit:
         if repo_branch:
@@ -277,7 +342,8 @@ def validate_manifest(
                 ValidationError(
                     path_str,
                     "repository.tag",
-                    f"A mutable branch reference ('{repo_branch}') alone is not allowed as an immutable release reference. Manifests must specify an immutable 'tag' or 'commit'.",
+                    f"Mutable branch reference ('{repo_branch}') alone is rejected. "
+                    "Community manifests must specify an immutable 'tag' or 'commit' to guarantee reproducible builds.",
                 )
             )
         else:
@@ -285,7 +351,7 @@ def validate_manifest(
                 ValidationError(
                     path_str,
                     "repository.tag",
-                    "Manifests must specify an immutable 'tag' or 'commit' reference for releases.",
+                    "Missing immutable release reference. Manifests must specify a 'tag' or 'commit'.",
                 )
             )
 
@@ -379,34 +445,22 @@ def validate_manifest(
             )
         )
 
-    # Security and trust rule:
-    # Developers must NOT be allowed to self-assign verification status ('official' or 'community-reviewed').
-    status = meta_sec.get("status")
-    if status is not None:
-        if not isinstance(status, str) or not status.strip():
-            errors.append(
-                ValidationError(
-                    path_str, "metadata.status", "Field 'status' must be a non-empty string"
-                )
+    # 6. Security rule: VERIFICATION STATUS
+    # Community developers must NEVER assign their own verification status.
+    # The 'status' field is strictly prohibited from community manifests.
+    # Verification labels (Official, Community Reviewed, Unverified, Problematic)
+    # are assigned and managed exclusively by ELYos repository maintainers.
+    if "status" in meta_sec or "status" in module_sec or "status" in data:
+        errors.append(
+            ValidationError(
+                path_str,
+                "metadata.status",
+                "The 'status' field is strictly prohibited in community manifests. "
+                "Community developers cannot assign their own verification status. "
+                "Verification labels (Official, Community Reviewed, Unverified, Problematic) "
+                "are controlled and assigned exclusively by ELYos repository maintainers.",
             )
-        else:
-            status_clean = status.strip().lower()
-            if status_clean not in VALID_STATUSES:
-                errors.append(
-                    ValidationError(
-                        path_str,
-                        "metadata.status",
-                        f"Invalid verification status '{status}'. Allowed: {sorted(VALID_STATUSES)}",
-                    )
-                )
-            elif not allow_privileged_status and status_clean in RESTRICTED_STATUSES:
-                errors.append(
-                    ValidationError(
-                        path_str,
-                        "metadata.status",
-                        f"Security policy violation: Developers cannot self-assign status '{status}'. Verification status is strictly assigned by ELYos repository maintainers. Community manifests must specify 'unverified'.",
-                    )
-                )
+        )
 
     return errors
 
@@ -414,7 +468,6 @@ def validate_manifest(
 def scan_and_validate(
     repo_root: Path,
     registry_dirs: List[str] | None = None,
-    allow_privileged_status: bool = False,
 ) -> Tuple[int, List[ValidationError]]:
     """Scan registry directories and validate all TOML manifest files."""
     if registry_dirs is None:
@@ -439,6 +492,10 @@ def scan_and_validate(
         for item in sorted(dir_path.iterdir()):
             # Ignore hidden files like .gitkeep or .DS_Store
             if item.name.startswith("."):
+                continue
+
+            # Allow registry documentation files
+            if item.name.lower() in ("readme.md", "license.md", "license"):
                 continue
 
             # Verify that manifest files have .toml extension
@@ -475,7 +532,6 @@ def scan_and_validate(
                 data,
                 item.relative_to(repo_root),
                 seen_ids=seen_ids,
-                allow_privileged_status=allow_privileged_status,
             )
             all_errors.extend(errs)
 
@@ -493,11 +549,6 @@ def main(argv: List[str] | None = None) -> int:
         default=Path(__file__).resolve().parent.parent,
         help="Path to repository root (defaults to parent of tools/).",
     )
-    parser.add_argument(
-        "--allow-privileged-status",
-        action="store_true",
-        help="Allow official/community-reviewed status (for maintainer toolchains).",
-    )
     args = parser.parse_args(argv)
 
     repo_root = args.repo_root.resolve()
@@ -506,9 +557,7 @@ def main(argv: List[str] | None = None) -> int:
     print(f"Repository Root: {repo_root}")
     print("=" * 60)
 
-    count, errors = scan_and_validate(
-        repo_root, allow_privileged_status=args.allow_privileged_status
-    )
+    count, errors = scan_and_validate(repo_root)
 
     print(f"Scanned {count} community manifest(s).")
 

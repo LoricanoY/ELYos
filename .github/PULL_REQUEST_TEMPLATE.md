@@ -42,7 +42,7 @@ Closes #
 
 - [ ] Does this PR introduce new dependencies? (If yes, justify).
 - [ ] Community manifests specify an immutable release reference (`tag` or `commit`), not a mutable branch.
-- [ ] Community manifests do not attempt to self-assign `official` or `community-reviewed` verification status.
+- [ ] Community manifests do not include a 'status' field (verification status is maintainer-controlled).
 - [ ] No secrets, keys, or sensitive credentials are committed.
 
 ## Documentation Changes

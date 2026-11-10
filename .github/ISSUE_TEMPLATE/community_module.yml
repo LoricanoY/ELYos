@@ -55,7 +55,7 @@ body:
           required: true
         - label: I have run 'python tools/validate_manifests.py' locally and it passes with 0 errors.
           required: true
-        - label: The manifest specifies 'unverified' status (maintainers assign verified tiers).
+        - label: The manifest does not include a 'status' field (verification status is maintainer-controlled).
           required: true
         - label: The manifest references an immutable Git tag or commit hash.
           required: true

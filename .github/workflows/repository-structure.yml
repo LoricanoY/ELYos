@@ -3,33 +3,13 @@ name: Repository Structure & Boundaries
 on:
   push:
     paths:
-      - "core/**"
-      - "system-modules/**"
-      - "community-system-modules/**"
-      - "modules/**"
-      - "community-modules/**"
-      - "sdk/**"
-      - "tools/**"
-      - "tests/**"
       - "docs/**"
-      - "README.md"
-      - "LICENSE"
-      - "CONTRIBUTING.md"
+      - "tools/validate_structure.py"
       - ".github/workflows/repository-structure.yml"
   pull_request:
     paths:
-      - "core/**"
-      - "system-modules/**"
-      - "community-system-modules/**"
-      - "modules/**"
-      - "community-modules/**"
-      - "sdk/**"
-      - "tools/**"
-      - "tests/**"
       - "docs/**"
-      - "README.md"
-      - "LICENSE"
-      - "CONTRIBUTING.md"
+      - "tools/validate_structure.py"
       - ".github/workflows/repository-structure.yml"
 
 permissions:

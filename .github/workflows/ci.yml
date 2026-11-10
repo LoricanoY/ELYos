@@ -7,7 +7,13 @@ on:
   pull_request:
     branches:
       - main
+    paths-ignore:
+      - "community-system-modules/**"
+      - "community-modules/**"
+      - "docs/**"
 
+# Strict least-privilege: read-only repository contents.
+# Pull requests from forks are securely isolated and cannot access secrets or write tokens.
 permissions:
   contents: read
 

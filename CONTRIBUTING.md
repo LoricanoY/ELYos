@@ -115,21 +115,21 @@ architecture = ["x86_64"]                   # Required: List of supported archit
 [metadata]
 developer = "Developer Name"                # Required: Developer name or organization
 license = "MIT"                             # Required: Open-source license identifier
-status = "unverified"                       # Required: Must be 'unverified' for community submissions
+# NOTE: Do NOT include a 'status' field. Verification status is maintained exclusively by ELYos maintainers.
 ```
 
-### Verification Tiers & Security Policy
+### Verification Tiers & Maintainer Control
 
-| Status Tier | Description | Who Can Assign |
+| Status Tier | Description | Controlled By |
 |---|---|---|
-| `official` | Maintained and verified directly by the core ELYos team | Core maintainers only |
-| `community-reviewed` | Audited and validated by community reviewers | Core maintainers only |
-| `unverified` | Initial state for all community submissions | Default for contributors |
-| `problematic` | Automatically flagged when issue reports exceed 25% of unique installs | System automated / maintainers |
+| `Official` | Maintained and verified directly by the core ELYos team | Core maintainers |
+| `Community-Reviewed` | Audited and validated by community reviewers | Core maintainers |
+| `Unverified` | Initial baseline state for newly registered community modules | Core maintainers |
+| `Problematic` | Flagged when issue reports exceed 25% of unique installations | Automated / maintainers |
 
 > [!IMPORTANT]
-> **Why is verification status controlled exclusively by maintainers?**  
-> Verification status serves as an ecosystem trust marker. Allowing developers to self-assign `official` or `community-reviewed` status would undermine security and enable impersonation. New submissions must always declare `status = "unverified"`. Maintainers promote tiers only after independent review.
+> **Why is the `status` field excluded from community manifests?**  
+> Verification status serves as an ecosystem trust anchor. Community developers **must never assign or declare their own verification status**. Verification labels are tracked and managed exclusively by ELYos repository maintainers as external registry metadata. Any community manifest that includes a `status` field will be **automatically rejected** by CI.
 
 ---
 

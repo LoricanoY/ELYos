@@ -23,6 +23,7 @@ from tools.validate_manifests import (
 
 class TestManifestValidator(unittest.TestCase):
     def setUp(self):
+        # Clean community manifest: status field is strictly excluded
         self.valid_data = {
             "module": {
                 "id": "org.example.gaming-system",
@@ -43,7 +44,6 @@ class TestManifestValidator(unittest.TestCase):
             "metadata": {
                 "developer": "Example Developer",
                 "license": "MIT",
-                "status": "unverified",
             },
         }
 
@@ -90,10 +90,10 @@ class TestManifestValidator(unittest.TestCase):
         self.assertFalse(is_valid_module_id("org..invalid"))
         self.assertFalse(is_valid_module_id("org/invalid"))
 
-    def test_duplicate_module_id(self):
-        seen_ids = {"org.example.gaming-system": "existing.toml"}
+    def test_duplicate_module_id_cross_registry(self):
+        seen_ids = {"org.example.gaming-system": "community-system-modules/sys.toml"}
         errors = validate_manifest(
-            self.valid_data, Path("duplicate.toml"), seen_ids=seen_ids
+            self.valid_data, Path("community-modules/mod.toml"), seen_ids=seen_ids
         )
         duplicate_errors = [e for e in errors if "Duplicate module ID" in e.message]
         self.assertEqual(len(duplicate_errors), 1)
@@ -111,6 +111,18 @@ class TestManifestValidator(unittest.TestCase):
         self.assertTrue(len(tag_errors) >= 1)
         self.assertIn("mutable branch", tag_errors[0].message.lower())
 
+    def test_branch_name_used_as_tag_rejected(self):
+        data = dict(self.valid_data)
+        data["repository"] = {
+            "type": "git",
+            "url": "https://github.com/example/gaming-system",
+            "tag": "main",  # Mutable branch name used as tag
+        }
+        errors = validate_manifest(data, Path("test.toml"), seen_ids={})
+        tag_errors = [e for e in errors if e.field == "repository.tag"]
+        self.assertTrue(len(tag_errors) >= 1)
+        self.assertIn("mutable branch name", tag_errors[0].message.lower())
+
     def test_commit_hash_accepted_as_immutable_reference(self):
         data = dict(self.valid_data)
         data["repository"] = {
@@ -121,23 +133,33 @@ class TestManifestValidator(unittest.TestCase):
         errors = validate_manifest(data, Path("test.toml"), seen_ids={})
         self.assertEqual(errors, [])
 
-    def test_forbidden_self_assigned_status(self):
+    def test_invalid_commit_hash_rejected(self):
         data = dict(self.valid_data)
-        data["metadata"] = dict(data["metadata"])
-        data["metadata"]["status"] = "official"
+        data["repository"] = {
+            "type": "git",
+            "url": "https://github.com/example/gaming-system",
+            "commit": "not-a-valid-sha-xyz",
+        }
+        errors = validate_manifest(data, Path("test.toml"), seen_ids={})
+        commit_errors = [e for e in errors if e.field == "repository.commit"]
+        self.assertEqual(len(commit_errors), 1)
+        self.assertIn("not a valid Git SHA", commit_errors[0].message)
 
-        errors = validate_manifest(
-            data, Path("test.toml"), seen_ids={}, allow_privileged_status=False
-        )
-        status_errors = [e for e in errors if e.field == "metadata.status"]
-        self.assertEqual(len(status_errors), 1)
-        self.assertIn("cannot self-assign status", status_errors[0].message)
+    def test_status_field_strictly_prohibited(self):
+        # Rule: Community developers must never assign their own status
+        for forbidden_status in ["official", "community-reviewed", "unverified", "problematic"]:
+            data = dict(self.valid_data)
+            data["metadata"] = dict(data["metadata"])
+            data["metadata"]["status"] = forbidden_status
 
-        # But with allow_privileged_status=True, it passes
-        errors_privileged = validate_manifest(
-            data, Path("test.toml"), seen_ids={}, allow_privileged_status=True
-        )
-        self.assertEqual(errors_privileged, [])
+            errors = validate_manifest(data, Path("test.toml"), seen_ids={})
+            status_errors = [e for e in errors if e.field == "metadata.status"]
+            self.assertEqual(
+                len(status_errors),
+                1,
+                msg=f"Failed to reject status '{forbidden_status}'",
+            )
+            self.assertIn("strictly prohibited", status_errors[0].message)
 
     def test_architecture_validation(self):
         data = dict(self.valid_data)
@@ -155,6 +177,8 @@ class TestManifestValidator(unittest.TestCase):
         self.assertTrue(is_valid_url("https://github.com/example/repo"))
         self.assertTrue(is_valid_url("git://gitlab.com/example/repo.git"))
         self.assertFalse(is_valid_url("ftp://example.com/repo"))
+        self.assertFalse(is_valid_url("http://localhost:8080/repo"))
+        self.assertFalse(is_valid_url("http://127.0.0.1/repo"))
         self.assertFalse(is_valid_url("not a url"))
 
 
