@@ -1,0 +1,62 @@
+name: Repository Structure & Boundaries
+
+on:
+  push:
+    paths:
+      - "core/**"
+      - "system-modules/**"
+      - "community-system-modules/**"
+      - "modules/**"
+      - "community-modules/**"
+      - "sdk/**"
+      - "tools/**"
+      - "tests/**"
+      - "docs/**"
+      - "README.md"
+      - "LICENSE"
+      - "CONTRIBUTING.md"
+      - ".github/workflows/repository-structure.yml"
+  pull_request:
+    paths:
+      - "core/**"
+      - "system-modules/**"
+      - "community-system-modules/**"
+      - "modules/**"
+      - "community-modules/**"
+      - "sdk/**"
+      - "tools/**"
+      - "tests/**"
+      - "docs/**"
+      - "README.md"
+      - "LICENSE"
+      - "CONTRIBUTING.md"
+      - ".github/workflows/repository-structure.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: repo-structure-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate-structure:
+    name: Verify Structure & Official/Community Boundaries
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Verify Repository Architecture & Files
+        run: |
+          python tools/validate_structure.py
+
+      - name: Run Structure Validation Tests
+        run: |
+          python -m unittest tests/test_validate_structure.py -v

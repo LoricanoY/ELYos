@@ -1,0 +1,61 @@
+name: Community Module Submission
+description: Propose or register a new community-developed ELYos Module (extension)
+title: "[Community Module]: "
+labels: ["community-module", "registry"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this issue to announce, discuss, or request review for a **community ELYos Module** (`.elyosmod`).
+        
+        *Note:* Community source code must remain in your own external repository. Only TOML manifests are submitted to `community-modules/`.
+  - type: input
+    id: module-id
+    attributes:
+      label: Module Identifier
+      description: Reverse-domain unique identifier.
+      placeholder: e.g., com.developer.desktop-enhancement
+    validations:
+      required: true
+  - type: input
+    id: module-name
+    attributes:
+      label: Module Display Name
+      placeholder: e.g., Desktop Enhancement Tools
+    validations:
+      required: true
+  - type: input
+    id: repo-url
+    attributes:
+      label: External Repository URL
+      placeholder: https://github.com/developer/desktop-enhancement
+    validations:
+      required: true
+  - type: input
+    id: release-tag
+    attributes:
+      label: Release Tag / Commit Hash
+      description: Immutable release reference.
+      placeholder: e.g., v1.0.0
+    validations:
+      required: true
+  - type: textarea
+    id: description
+    attributes:
+      label: Description of Functionality
+      description: What capabilities does this module add to the active system module?
+    validations:
+      required: true
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Registry Compliance Checklist
+      options:
+        - label: My source code is hosted externally and not committed to the ELYos repo.
+          required: true
+        - label: I have run 'python tools/validate_manifests.py' locally and it passes with 0 errors.
+          required: true
+        - label: The manifest specifies 'unverified' status (maintainers assign verified tiers).
+          required: true
+        - label: The manifest references an immutable Git tag or commit hash.
+          required: true
