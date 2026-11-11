@@ -41,7 +41,7 @@ Closes #
 ## Security Considerations
 
 - [ ] Does this PR introduce new dependencies? (If yes, justify).
-- [ ] Community manifests specify an immutable release reference (`tag` or `commit`), not a mutable branch.
+- [ ] Community manifests specify an immutable 40-character Git commit SHA in `repository.commit`.
 - [ ] Community manifests do not include a 'status' field (verification status is maintainer-controlled).
 - [ ] No secrets, keys, or sensitive credentials are committed.
 

@@ -8,7 +8,8 @@ Validates ELYos community TOML manifests located in:
 
 Ensures required sections, fields, formats (SemVer, reverse-domain IDs),
 and security constraints:
-  - Immutable release references (tags/commits, rejecting mutable branches).
+  - Every community manifest MUST identify an immutable Git commit SHA.
+    Tags are optional human-readable metadata, not cryptographic proof of immutability.
   - Strict prohibition of the 'status' field in community manifests
     (verification status is managed exclusively by maintainers).
   - No external downloads or code execution.
@@ -49,8 +50,8 @@ ID_REGEX = re.compile(r"^[a-z0-9]+(\.[a-z0-9_-]+)+$")
 # URL validation regex (http, https, git protocols)
 URL_REGEX = re.compile(r"^(https?|git)://[^\s/$.?#].[^\s]*$", re.IGNORECASE)
 
-# Git commit hash regex (7 to 40 hex characters)
-COMMIT_HASH_REGEX = re.compile(r"^[0-9a-fA-F]{7,40}$")
+# Full Git commit SHA regex: 40 hex characters (SHA-1) or 64 hex characters (SHA-256)
+COMMIT_HASH_REGEX = re.compile(r"^[0-9a-fA-F]{40}(?:[0-9a-fA-F]{24})?$")
 
 # Common mutable branch / floating reference names that cannot be used as immutable tags
 MUTABLE_BRANCH_NAMES = {
@@ -113,6 +114,11 @@ def is_valid_url(url: str) -> bool:
     return True
 
 
+def is_valid_commit_hash(commit: str) -> bool:
+    """Check if commit string is a full 40-character or 64-character Git hash."""
+    return bool(COMMIT_HASH_REGEX.match(commit.strip()))
+
+
 def parse_toml(file_path: Path) -> Tuple[Dict[str, Any] | None, str | None]:
     """Parse a TOML file and return (data, error_message)."""
     if tomllib is None:
@@ -140,7 +146,7 @@ def validate_manifest(
     Ensures:
       - Required sections: [module], [repository], [compatibility], [metadata]
       - Required module fields: id, name, description, version
-      - Required repository fields: type, url, plus immutable tag or commit
+      - Required repository fields: type, url, and mandatory immutable commit SHA
       - Required compatibility fields: minimum_core_version, architecture
       - Required metadata fields: developer, license
       - Strict prohibition: no 'status' field in community manifests
@@ -248,7 +254,7 @@ def validate_manifest(
         )
 
     # 3. Validate [repository] section
-    # Required fields: type, url, and an immutable release reference (tag or commit)
+    # Required fields: type, url, and mandatory immutable commit SHA
     repo_type = repo_sec.get("type")
     if repo_type is None:
         errors.append(
@@ -293,12 +299,37 @@ def validate_manifest(
             )
         )
 
-    # Security rule: Git branch alone is NOT an immutable release reference.
-    # Manifests must provide an immutable 'tag' or 'commit'.
-    repo_tag = repo_sec.get("tag")
+    # Security requirement: Every community manifest MUST identify an immutable Git commit SHA.
+    # Tags can be provided as human-readable metadata, but are not cryptographic proof of immutability.
     repo_commit = repo_sec.get("commit")
-    repo_branch = repo_sec.get("branch")
+    if repo_commit is None:
+        errors.append(
+            ValidationError(
+                path_str,
+                "repository.commit",
+                "Missing required field 'commit'. Every community manifest must specify an immutable "
+                "Git commit SHA. Tags are mutable and do not provide cryptographic proof of immutability.",
+            )
+        )
+    elif not isinstance(repo_commit, str) or not repo_commit.strip():
+        errors.append(
+            ValidationError(
+                path_str,
+                "repository.commit",
+                "Field 'commit' must be a non-empty string containing a 40-character Git commit hash.",
+            )
+        )
+    elif not is_valid_commit_hash(repo_commit):
+        errors.append(
+            ValidationError(
+                path_str,
+                "repository.commit",
+                f"Commit '{repo_commit}' is not a valid Git SHA (must be 40 or 64 hexadecimal characters).",
+            )
+        )
 
+    # Optional tag validation (human-readable metadata)
+    repo_tag = repo_sec.get("tag")
     if repo_tag is not None:
         if not isinstance(repo_tag, str) or not repo_tag.strip():
             errors.append(
@@ -314,44 +345,7 @@ def validate_manifest(
                     path_str,
                     "repository.tag",
                     f"Tag '{repo_tag}' appears to be a mutable branch name. "
-                    "Manifests must reference an immutable release tag (e.g., 'v1.0.0').",
-                )
-            )
-
-    if repo_commit is not None:
-        if not isinstance(repo_commit, str) or not repo_commit.strip():
-            errors.append(
-                ValidationError(
-                    path_str,
-                    "repository.commit",
-                    "Field 'commit' must be a non-empty string",
-                )
-            )
-        elif not COMMIT_HASH_REGEX.match(repo_commit.strip()):
-            errors.append(
-                ValidationError(
-                    path_str,
-                    "repository.commit",
-                    f"Commit '{repo_commit}' is not a valid Git SHA (must be 7-40 hexadecimal characters).",
-                )
-            )
-
-    if not repo_tag and not repo_commit:
-        if repo_branch:
-            errors.append(
-                ValidationError(
-                    path_str,
-                    "repository.tag",
-                    f"Mutable branch reference ('{repo_branch}') alone is rejected. "
-                    "Community manifests must specify an immutable 'tag' or 'commit' to guarantee reproducible builds.",
-                )
-            )
-        else:
-            errors.append(
-                ValidationError(
-                    path_str,
-                    "repository.tag",
-                    "Missing immutable release reference. Manifests must specify a 'tag' or 'commit'.",
+                    "If provided, 'tag' must be a human-readable release tag (e.g., 'v1.0.0').",
                 )
             )
 

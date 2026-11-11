@@ -32,13 +32,19 @@ body:
     validations:
       required: true
   - type: input
-    id: release-tag
+    id: commit-hash
     attributes:
-      label: Release Tag / Commit Hash
-      description: Immutable release reference.
-      placeholder: e.g., v1.0.0
+      label: Git Commit SHA
+      description: Immutable 40-character Git commit hash for this release.
+      placeholder: e.g., a1b2c3d4e5f60718293a4b5c6d7e8f9012345678
     validations:
       required: true
+  - type: input
+    id: release-tag
+    attributes:
+      label: Release Tag (Optional Metadata)
+      description: Human-readable release tag.
+      placeholder: e.g., v1.0.0
   - type: textarea
     id: description
     attributes:
@@ -57,5 +63,5 @@ body:
           required: true
         - label: The manifest does not include a 'status' field (verification status is maintainer-controlled).
           required: true
-        - label: The manifest references an immutable Git tag or commit hash.
+        - label: The manifest specifies an immutable 40-character Git commit SHA in repository.commit.
           required: true

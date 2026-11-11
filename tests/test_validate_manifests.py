@@ -6,6 +6,7 @@ Unit tests for tools/validate_manifests.py.
 """
 
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -14,16 +15,19 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
 from tools.validate_manifests import (
+    is_valid_commit_hash,
     is_valid_module_id,
     is_valid_semver,
     is_valid_url,
+    scan_and_validate,
     validate_manifest,
 )
 
 
 class TestManifestValidator(unittest.TestCase):
     def setUp(self):
-        # Clean community manifest: status field is strictly excluded
+        # Canonical valid community manifest:
+        # Mandatory: commit SHA (40-hex), no status field
         self.valid_data = {
             "module": {
                 "id": "org.example.gaming-system",
@@ -34,7 +38,7 @@ class TestManifestValidator(unittest.TestCase):
             "repository": {
                 "type": "git",
                 "url": "https://github.com/example/gaming-system",
-                "branch": "main",
+                "commit": "a1b2c3d4e5f60718293a4b5c6d7e8f9012345678",
                 "tag": "v1.0.0",
             },
             "compatibility": {
@@ -98,55 +102,46 @@ class TestManifestValidator(unittest.TestCase):
         duplicate_errors = [e for e in errors if "Duplicate module ID" in e.message]
         self.assertEqual(len(duplicate_errors), 1)
 
-    def test_mutable_branch_without_immutable_tag_rejected(self):
+    def test_missing_commit_hash_rejected_even_with_tag(self):
+        """A tag alone is not cryptographic proof of immutability; commit is mandatory."""
         data = dict(self.valid_data)
         data["repository"] = {
             "type": "git",
             "url": "https://github.com/example/gaming-system",
-            "branch": "main",
-            # No tag or commit
-        }
-        errors = validate_manifest(data, Path("test.toml"), seen_ids={})
-        tag_errors = [e for e in errors if e.field == "repository.tag"]
-        self.assertTrue(len(tag_errors) >= 1)
-        self.assertIn("mutable branch", tag_errors[0].message.lower())
-
-    def test_branch_name_used_as_tag_rejected(self):
-        data = dict(self.valid_data)
-        data["repository"] = {
-            "type": "git",
-            "url": "https://github.com/example/gaming-system",
-            "tag": "main",  # Mutable branch name used as tag
-        }
-        errors = validate_manifest(data, Path("test.toml"), seen_ids={})
-        tag_errors = [e for e in errors if e.field == "repository.tag"]
-        self.assertTrue(len(tag_errors) >= 1)
-        self.assertIn("mutable branch name", tag_errors[0].message.lower())
-
-    def test_commit_hash_accepted_as_immutable_reference(self):
-        data = dict(self.valid_data)
-        data["repository"] = {
-            "type": "git",
-            "url": "https://github.com/example/gaming-system",
-            "commit": "a1b2c3d4e5f60718293a4b5c6d7e8f9012345678",
-        }
-        errors = validate_manifest(data, Path("test.toml"), seen_ids={})
-        self.assertEqual(errors, [])
-
-    def test_invalid_commit_hash_rejected(self):
-        data = dict(self.valid_data)
-        data["repository"] = {
-            "type": "git",
-            "url": "https://github.com/example/gaming-system",
-            "commit": "not-a-valid-sha-xyz",
+            "tag": "v1.0.0",
+            # commit is deliberately omitted
         }
         errors = validate_manifest(data, Path("test.toml"), seen_ids={})
         commit_errors = [e for e in errors if e.field == "repository.commit"]
         self.assertEqual(len(commit_errors), 1)
-        self.assertIn("not a valid Git SHA", commit_errors[0].message)
+        self.assertIn("Missing required field 'commit'", commit_errors[0].message)
+
+    def test_commit_hash_validation(self):
+        # 40-char SHA-1
+        self.assertTrue(is_valid_commit_hash("a1b2c3d4e5f60718293a4b5c6d7e8f9012345678"))
+        # 64-char SHA-256
+        self.assertTrue(
+            is_valid_commit_hash(
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+            )
+        )
+        # Invalid short or non-hex
+        self.assertFalse(is_valid_commit_hash("short123"))
+        self.assertFalse(is_valid_commit_hash("g" * 40))  # 'g' is not hex
+        self.assertFalse(is_valid_commit_hash("main"))
+
+    def test_branch_name_used_as_tag_rejected(self):
+        data = dict(self.valid_data)
+        data["repository"] = dict(data["repository"])
+        data["repository"]["tag"] = "main"
+
+        errors = validate_manifest(data, Path("test.toml"), seen_ids={})
+        tag_errors = [e for e in errors if e.field == "repository.tag"]
+        self.assertEqual(len(tag_errors), 1)
+        self.assertIn("mutable branch name", tag_errors[0].message.lower())
 
     def test_status_field_strictly_prohibited(self):
-        # Rule: Community developers must never assign their own status
+        # Community developers must never assign their own status
         for forbidden_status in ["official", "community-reviewed", "unverified", "problematic"]:
             data = dict(self.valid_data)
             data["metadata"] = dict(data["metadata"])
@@ -180,6 +175,104 @@ class TestManifestValidator(unittest.TestCase):
         self.assertFalse(is_valid_url("http://localhost:8080/repo"))
         self.assertFalse(is_valid_url("http://127.0.0.1/repo"))
         self.assertFalse(is_valid_url("not a url"))
+
+    def test_fixtures_system_module_and_extension_accepted_and_rejected(self):
+        """
+        Verify both community registries using temporary test fixtures:
+        - A valid community system module (.toml)
+        - A valid community extension (.toml)
+        Both are accepted when valid and rejected when invalid.
+        No fictitious modules are left registered in the repo.
+        """
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_root = Path(tmp_dir)
+            sys_reg = tmp_root / "community-system-modules"
+            mod_reg = tmp_root / "community-modules"
+            sys_reg.mkdir()
+            mod_reg.mkdir()
+
+            # 1. Test empty registries produce valid result
+            count, errors = scan_and_validate(tmp_root)
+            self.assertEqual(count, 0)
+            self.assertEqual(errors, [])
+
+            # 2. Create valid system module manifest fixture
+            sys_manifest_content = """
+[module]
+id = "org.community.arch-hardened"
+name = "Arch Linux Hardened"
+description = "Community hardened kernel system module"
+version = "1.0.0"
+
+[repository]
+type = "git"
+url = "https://github.com/community/arch-hardened"
+commit = "1111222233334444555566667777888899990000"
+tag = "v1.0.0"
+
+[compatibility]
+minimum_core_version = "0.1.0"
+architecture = ["x86_64"]
+
+[metadata]
+developer = "Security Team"
+license = "GPL-3.0"
+"""
+            # Create valid community extension manifest fixture
+            ext_manifest_content = """
+[module]
+id = "org.community.battery-saver"
+name = "Battery Optimizer"
+description = "Aggressive power management module"
+version = "0.2.1"
+
+[repository]
+type = "git"
+url = "https://github.com/community/battery-saver"
+commit = "aaaabbbbccccddddeeeeffff0000111122223333"
+tag = "v0.2.1"
+
+[compatibility]
+minimum_core_version = "0.1.0"
+architecture = ["x86_64", "aarch64"]
+
+[metadata]
+developer = "Power Hacker"
+license = "MIT"
+"""
+            (sys_reg / "arch-hardened.toml").write_text(
+                sys_manifest_content, encoding="utf-8"
+            )
+            (mod_reg / "battery-saver.toml").write_text(
+                ext_manifest_content, encoding="utf-8"
+            )
+
+            # Validate both fixtures are scanned and accepted
+            count, errors = scan_and_validate(tmp_root)
+            self.assertEqual(count, 2)
+            self.assertEqual(errors, [])
+
+            # 3. Test invalid fixtures:
+            # - sys module missing commit
+            # - ext module with self-assigned status
+            bad_sys_content = sys_manifest_content.replace(
+                'commit = "1111222233334444555566667777888899990000"', ""
+            )
+            bad_ext_content = ext_manifest_content + '\nstatus = "official"\n'
+
+            (sys_reg / "arch-hardened.toml").write_text(
+                bad_sys_content, encoding="utf-8"
+            )
+            (mod_reg / "battery-saver.toml").write_text(
+                bad_ext_content, encoding="utf-8"
+            )
+
+            count, errors = scan_and_validate(tmp_root)
+            self.assertEqual(count, 2)
+            self.assertEqual(len(errors), 2)
+            err_fields = [e.field for e in errors]
+            self.assertIn("repository.commit", err_fields)
+            self.assertIn("metadata.status", err_fields)
 
 
 if __name__ == "__main__":

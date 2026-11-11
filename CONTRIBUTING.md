@@ -87,7 +87,7 @@ Community components follow a decentralized registry pattern. **Do not commit yo
 ### How to Register a Community Module:
 1. Host your module source code and releases in your own public repository (e.g., on GitHub or GitLab).
 2. Prepare a package adhering to the ELYos package specification (`.elyossysmod` for System Modules or `.elyosmod` for Modules).
-3. Ensure you have published a release with an **immutable Git tag** (e.g., `v1.0.0`) or **commit hash**. Mutable branch references like `main` or `master` are not accepted as release targets.
+3. Ensure you have published a release and identified its **immutable Git commit SHA** (40-character hexadecimal hash). While a Git tag (e.g., `v1.0.0`) may be provided as human-readable metadata, git tags are mutable and cannot serve as cryptographic proof of immutability.
 4. Submit a Pull Request adding a single TOML manifest file to the appropriate registry directory:
    - For System Modules: `community-system-modules/<module-id>.toml`
    - For Modules: `community-modules/<module-id>.toml`
@@ -106,7 +106,8 @@ version = "1.0.0"                           # Required: Valid Semantic Version (
 [repository]
 type = "git"                                # Required: Currently 'git'
 url = "https://github.com/developer/mod"    # Required: Valid http(s):// or git:// URL
-tag = "v1.0.0"                              # Required: Immutable release tag or commit hash (branches alone are rejected)
+commit = "a1b2c3d4e5f60718293a4b5c6d7e8f9012345678" # Required: Immutable 40-character Git commit SHA
+tag = "v1.0.0"                              # Optional: Human-readable release tag metadata
 
 [compatibility]
 minimum_core_version = "0.1.0"              # Required: SemVer string for minimum supported Core
