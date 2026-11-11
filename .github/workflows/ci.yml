@@ -1,0 +1,51 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+    paths-ignore:
+      - "community-system-modules/**"
+      - "community-modules/**"
+      - "docs/**"
+
+# Strict least-privilege: read-only repository contents.
+# Pull requests from forks are securely isolated and cannot access secrets or write tokens.
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate-and-test:
+    name: Repository Quality & Validation
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.11", "3.12"]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Validate Repository Structure & Boundaries
+        run: |
+          python tools/validate_structure.py
+
+      - name: Validate Community TOML Manifests
+        run: |
+          python tools/validate_manifests.py
+
+      - name: Run Test Suite
+        run: |
+          python -m unittest discover -s tests -v

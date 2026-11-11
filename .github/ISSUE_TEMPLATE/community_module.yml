@@ -1,0 +1,67 @@
+name: Community Module Submission
+description: Propose or register a new community-developed ELYos Module (extension)
+title: "[Community Module]: "
+labels: ["community-module", "registry"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this issue to announce, discuss, or request review for a **community ELYos Module** (`.elyosmod`).
+        
+        *Note:* Community source code must remain in your own external repository. Only TOML manifests are submitted to `community-modules/`.
+  - type: input
+    id: module-id
+    attributes:
+      label: Module Identifier
+      description: Reverse-domain unique identifier.
+      placeholder: e.g., com.developer.desktop-enhancement
+    validations:
+      required: true
+  - type: input
+    id: module-name
+    attributes:
+      label: Module Display Name
+      placeholder: e.g., Desktop Enhancement Tools
+    validations:
+      required: true
+  - type: input
+    id: repo-url
+    attributes:
+      label: External Repository URL
+      placeholder: https://github.com/developer/desktop-enhancement
+    validations:
+      required: true
+  - type: input
+    id: commit-hash
+    attributes:
+      label: Git Commit SHA
+      description: Immutable 40-character Git commit hash for this release.
+      placeholder: e.g., a1b2c3d4e5f60718293a4b5c6d7e8f9012345678
+    validations:
+      required: true
+  - type: input
+    id: release-tag
+    attributes:
+      label: Release Tag (Optional Metadata)
+      description: Human-readable release tag.
+      placeholder: e.g., v1.0.0
+  - type: textarea
+    id: description
+    attributes:
+      label: Description of Functionality
+      description: What capabilities does this module add to the active system module?
+    validations:
+      required: true
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Registry Compliance Checklist
+      options:
+        - label: My source code is hosted externally and not committed to the ELYos repo.
+          required: true
+        - label: I have run 'python tools/validate_manifests.py' locally and it passes with 0 errors.
+          required: true
+        - label: The manifest does not include a 'status' field (verification status is maintainer-controlled).
+          required: true
+        - label: The manifest specifies an immutable 40-character Git commit SHA in repository.commit.
+          required: true

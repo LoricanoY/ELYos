@@ -1,0 +1,44 @@
+name: Community Manifest Validation
+
+on:
+  push:
+    paths:
+      - "community-system-modules/**"
+      - "community-modules/**"
+      - "tools/validate_manifests.py"
+      - ".github/workflows/manifest-validation.yml"
+  pull_request:
+    paths:
+      - "community-system-modules/**"
+      - "community-modules/**"
+      - "tools/validate_manifests.py"
+      - ".github/workflows/manifest-validation.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: manifest-validation-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate-manifests:
+    name: Validate TOML Manifests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Validate Community Manifests
+        run: |
+          python tools/validate_manifests.py
+
+      - name: Run Manifest Validation Tests
+        run: |
+          python -m unittest tests/test_validate_manifests.py -v

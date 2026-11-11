@@ -80,23 +80,29 @@ ELYos is founded upon **10 non-negotiable principles** detailed in our [Manifest
 
 ```text
 ELYos/
+├── .github/                           # GitHub Actions CI/CD workflows, issue & PR templates
+│   ├── workflows/                     # Automated quality gates (CI, manifest, structure)
+│   ├── ISSUE_TEMPLATE/                # Standardized issue forms
+│   ├── PULL_REQUEST_TEMPLATE.md       # Pull request checklist
+│   └── CODEOWNERS                     # Repository maintainer definitions
+│
 ├── README.md                          # Project introduction and overview
 ├── LICENSE                            # Software license
 ├── CONTRIBUTING.md                    # Guidelines for contributors and registry submissions
 │
 ├── core/                              # ELYos Core source code (Rust, Qt 6 / QML)
-│
 ├── system-modules/                    # Official ELYos System Modules (ArchELYos)
-│
 ├── community-system-modules/          # Registry manifests for community System Modules
-│
 ├── modules/                           # Official ELYos Modules
-│
 ├── community-modules/                 # Registry manifests for community Modules
 │
 ├── sdk/                               # ELYos SDK, development libraries, and compiler wrappers
 ├── tools/                             # Build scripts, packaging, and validation tools
-├── tests/                             # Integration tests and QEMU test harnesses
+│   ├── validate_manifests.py          # Manifest validation script
+│   └── validate_structure.py          # Repository structure validation script
+├── tests/                             # Integration tests, unit tests, and QEMU harnesses
+│   ├── test_validate_manifests.py     # Manifest validator tests
+│   └── test_validate_structure.py     # Structure validator tests
 │
 └── docs/                              # Architecture and design documentation
     ├── MANIFESTO.md                   # Project philosophy and 10 fundamental principles

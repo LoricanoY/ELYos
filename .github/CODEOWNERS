@@ -1,0 +1,20 @@
+# Global repository code ownership
+* @LoricanoY
+
+# Infrastructure and CI/CD
+/.github/ @LoricanoY
+/tools/ @LoricanoY
+/tests/ @LoricanoY
+
+# Core and Official Modules
+/core/ @LoricanoY
+/system-modules/ @LoricanoY
+/modules/ @LoricanoY
+/sdk/ @LoricanoY
+
+# Community Registries
+/community-system-modules/ @LoricanoY
+/community-modules/ @LoricanoY
+
+# Architecture & Specifications
+/docs/ @LoricanoY
